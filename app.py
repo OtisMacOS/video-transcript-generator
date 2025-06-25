@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 from languages import get_text, LANGUAGES
+from sandbox_config import sandbox_manager, SandboxConfig
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +31,23 @@ class TranscriptResponse(BaseModel):
     text: str
     segments: list
     language: str
+
+class LLMRequest(BaseModel):
+    """LLM润色请求模型"""
+    text: str
+    api_key: str
+    provider: str = "openai"  # openai, anthropic, google
+    style: str = "polish"  # polish, summarize, translate
+    target_language: str = "zh"
+
+class LLMResponse(BaseModel):
+    """LLM润色响应模型"""
+    original_text: str
+    polished_text: str
+    provider: str
+    style: str
+    processing_time: float
+    sandbox_validation: dict
 
 def generate_html(ui_lang="zh"):
     """生成多语言HTML页面"""
@@ -426,6 +444,154 @@ async def transcribe_video(file: UploadFile = File(...), language: str = Form("a
             logger.error(f"转录失败: {str(e)}")
             addLog(f"转录失败: {str(e)}", 'error')
             raise HTTPException(status_code=500, detail=f"转录失败: {str(e)}")
+
+@app.post("/polish", response_model=LLMResponse)
+async def polish_text(request: LLMRequest):
+    """LLM文本润色接口（沙箱模式）"""
+    
+    start_time = time.time()
+    logger.info(f"收到LLM润色请求: provider={request.provider}, style={request.style}")
+    
+    # 沙箱验证
+    validation_result = sandbox_manager.validate_request(
+        api_key=request.api_key,
+        input_text=request.text
+    )
+    
+    if not validation_result["valid"]:
+        logger.error(f"沙箱验证失败: {validation_result['errors']}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"安全验证失败: {', '.join(validation_result['errors'])}"
+        )
+    
+    logger.info("沙箱验证通过，开始处理LLM请求")
+    
+    try:
+        # 根据提供商调用不同的LLM API
+        if request.provider == "openai":
+            polished_text = await _call_openai_api(request)
+        elif request.provider == "anthropic":
+            polished_text = await _call_anthropic_api(request)
+        elif request.provider == "google":
+            polished_text = await _call_google_api(request)
+        else:
+            raise HTTPException(status_code=400, detail="不支持的LLM提供商")
+        
+        processing_time = time.time() - start_time
+        
+        # 记录沙箱审计日志
+        sandbox_manager.log_request({
+            "provider": request.provider,
+            "input": request.text,
+            "api_key": request.api_key,
+            "style": request.style
+        })
+        
+        logger.info(f"LLM润色完成，耗时: {processing_time:.2f}秒")
+        
+        return LLMResponse(
+            original_text=request.text,
+            polished_text=polished_text,
+            provider=request.provider,
+            style=request.style,
+            processing_time=processing_time,
+            sandbox_validation=validation_result
+        )
+        
+    except Exception as e:
+        logger.error(f"LLM润色失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM润色失败: {str(e)}")
+
+async def _call_openai_api(request: LLMRequest) -> str:
+    """调用OpenAI API"""
+    import openai
+    
+    # 设置API密钥
+    openai.api_key = request.api_key
+    
+    # 根据风格构建提示词
+    if request.style == "polish":
+        prompt = f"请润色以下文本，使其更加流畅自然：\n\n{request.text}"
+    elif request.style == "summarize":
+        prompt = f"请总结以下文本的主要内容：\n\n{request.text}"
+    elif request.style == "translate":
+        prompt = f"请将以下文本翻译成{request.target_language}：\n\n{request.text}"
+    else:
+        prompt = f"请处理以下文本：\n\n{request.text}"
+    
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个专业的文本处理助手。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logger.error(f"OpenAI API调用失败: {str(e)}")
+        raise Exception(f"OpenAI API错误: {str(e)}")
+
+async def _call_anthropic_api(request: LLMRequest) -> str:
+    """调用Anthropic API"""
+    import anthropic
+    
+    client = anthropic.Anthropic(api_key=request.api_key)
+    
+    # 构建提示词
+    if request.style == "polish":
+        prompt = f"请润色以下文本，使其更加流畅自然：\n\n{request.text}"
+    elif request.style == "summarize":
+        prompt = f"请总结以下文本的主要内容：\n\n{request.text}"
+    elif request.style == "translate":
+        prompt = f"请将以下文本翻译成{request.target_language}：\n\n{request.text}"
+    else:
+        prompt = f"请处理以下文本：\n\n{request.text}"
+    
+    try:
+        response = await client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=2000,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.content[0].text.strip()
+        
+    except Exception as e:
+        logger.error(f"Anthropic API调用失败: {str(e)}")
+        raise Exception(f"Anthropic API错误: {str(e)}")
+
+async def _call_google_api(request: LLMRequest) -> str:
+    """调用Google AI API"""
+    import google.generativeai as genai
+    
+    genai.configure(api_key=request.api_key)
+    model = genai.GenerativeModel('gemini-pro')
+    
+    # 构建提示词
+    if request.style == "polish":
+        prompt = f"请润色以下文本，使其更加流畅自然：\n\n{request.text}"
+    elif request.style == "summarize":
+        prompt = f"请总结以下文本的主要内容：\n\n{request.text}"
+    elif request.style == "translate":
+        prompt = f"请将以下文本翻译成{request.target_language}：\n\n{request.text}"
+    else:
+        prompt = f"请处理以下文本：\n\n{request.text}"
+    
+    try:
+        response = await model.generate_content_async(prompt)
+        return response.text.strip()
+        
+    except Exception as e:
+        logger.error(f"Google AI API调用失败: {str(e)}")
+        raise Exception(f"Google AI API错误: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

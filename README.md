@@ -1,26 +1,117 @@
-# 视频转录生成器 MVP
+# 🗓️ Progress & Plans (2024-06-25)
 
-一个简单的视频转录工具，使用Whisper AI进行语音识别。
+## ✅ Completed (Today's Progress)
 
-## 🎯 MVP功能
+* Designed and implemented sandbox security mechanisms (API key validation, sensitive word filtering, resource limits, audit logs)
+* Sensitive info detection supports Chinese-English, numeric patterns, and common formats (e.g., passwords, credit card numbers, ID numbers)
+* Automated test suite for sandbox functionality, all test cases passed
+* Containerization and Kubernetes orchestration support (security context, key management, resource limits)
+* Documentation completed (sandbox and container tech overview, dev process guide)
 
-- 📹 视频文件上传
-- 🎵 自动音频提取
-- 🤖 Whisper语音识别
-- 📝 文字转录显示
-- 🌍 多语言界面支持（中文、英语、俄语、德语、法语、日语）
-- 📊 实时处理日志显示
+## 🔮 To Do (Upcoming Plans)
 
-## 🆓 免费运行方案
+* Support multiple LLMs (OpenAI, Anthropic, Google Gemini, etc.)
+* Integrate LLM functions (polish/summarize/translate) into frontend
+* Support user-defined API key proxy
+* UI improvements for LLM-related interactions
+* Support video URL direct upload and auto-download
+* Add transcription history & multi-format export (TXT/SRT/VTT)
+* Enable batch processing & task queue
+* Complete Kubernetes production deployment docs
+* Add API rate limiting and anti-abuse mechanisms
+* Add OAuth/SSO user authentication
+* Expand security use cases & test edge scenarios
+* Enable CI/CD automation
 
-### Whisper运行位置
-1. **本地运行** (推荐) - 完全免费，无需API费用
-2. **Hugging Face** - 免费GPU资源
-3. **Google Colab** - 免费GPU，有时间限制
+---
 
-## 🚀 快速开始
+## 🗺️ Project Architecture (Mermaid)
 
-### 1. 安装FFmpeg
+```mermaid
+graph TD
+    A[User uploads video/text] --> B[FastAPI Backend]
+    B --> C[Audio Extraction / Whisper Transcription]
+    B --> D[LLM Polish / Summary / Translation]
+    D --> E[Sandbox Security Check]
+    E -->|Pass| F[Call LLM API]
+    E -->|Fail| G[Reject with Error]
+    F --> H[Return Optimized Result]
+    C --> H
+    H --> I[Frontend Display / Export]
+```
+
+## 🚣️ Today's Dev Flow (Mermaid)
+
+```mermaid
+gantt
+title Today's Development Process
+    section Requirement Analysis
+    Discussion               :done,  des1, 2024-06-25, 1h
+    section Sandbox Implementation
+    Sandbox Coding           :done,  des2, 2024-06-25, 2h
+    Sensitive Word Regex     :done,  des3, 2024-06-25, 1h
+    section Testing & Debugging
+    Automation Scripts       :done,  des4, 2024-06-25, 1h
+    Case Debugging           :done,  des5, 2024-06-25, 1h
+    section Docs & Summary
+    Documentation            :done,  des6, 2024-06-25, 0.5h
+```
+
+---
+
+# 🔮 Next Steps
+
+## 1. LLM Enhancement & Multi-Model Support
+
+* [ ] Support various LLMs (OpenAI, Anthropic, Gemini, etc.)
+* [ ] Integrate frontend LLM functions: polish, summary, translation
+* [ ] Enable secure proxy for user-defined API keys
+
+## 2. UX & Feature Enhancements
+
+* [ ] UI optimization with LLM interaction support
+* [ ] Direct video URL input & auto-download
+* [ ] Transcription history & multi-format export (TXT/SRT/VTT)
+* [ ] Batch processing & task queue
+
+## 3. Deployment & Security
+
+* [ ] Improve Kubernetes production deployment docs
+* [ ] Implement API rate limiting & anti-spam
+* [ ] Add OAuth/SSO authentication
+
+## 4. Codebase & Testing
+
+* [ ] Expand security test cases & edge scenario testing
+* [ ] Enable CI/CD automation
+
+---
+
+# Video Transcription Generator MVP
+
+A simple video transcription tool using Whisper AI for speech recognition.
+
+## 🎯 MVP Features
+
+* 🎩 Video file upload
+* 🎵 Auto audio extraction
+* 🤖 Whisper-based speech recognition
+* 📝 Transcript display
+* 🌍 Multilingual UI (CN, EN, RU, DE, FR, JP)
+* 📊 Real-time processing log
+
+## 🤓 Free Run Options
+
+### Whisper Runtime Options
+
+1. **Local** (Recommended) - 100% free, no API fees
+2. **Hugging Face** - Free GPU compute
+3. **Google Colab** - Free GPU (time-limited)
+
+## 🚀 Quick Start
+
+### 1. Install FFmpeg
+
 ```bash
 # macOS
 brew install ffmpeg
@@ -29,101 +120,122 @@ brew install ffmpeg
 sudo apt install ffmpeg
 
 # Windows
-# 下载 https://ffmpeg.org/download.html
+# Download from https://ffmpeg.org/download.html
 ```
 
-### 2. 运行项目
+### 2. Run Project
+
 ```bash
-# 方法1: 使用启动脚本
+# Option 1: Use launch script
 python run.py
 
-# 方法2: 手动启动
+# Option 2: Manual start
 pip install -r requirements.txt
 python app.py
 ```
 
-### 3. 访问网站
-打开浏览器访问: http://localhost:8080
+### 3. Visit the App
 
-## 📁 项目结构
+Open browser: [http://localhost:8080](http://localhost:8080)
+
+## 📁 Project Structure
+
 ```
-├── app.py              # 主应用文件
-├── languages.py        # 多语言配置
-├── run.py              # 启动脚本
-├── setup.py            # 环境设置脚本
-├── requirements.txt    # Python依赖
-├── .gitignore          # Git忽略文件
-└── README.md          # 说明文档
+project-root/
+├── app.py               # Main FastAPI backend
+├── languages.py         # Multilingual UI config
+├── sandbox_config.py    # Sandbox security logic
+├── test_sandbox.py      # Sandbox test suite
+├── run.py               # Startup script
+├── requirements.txt     # Python dependencies
+├── Dockerfile           # Docker build config
+├── k8s-deployment.yaml  # Kubernetes deployment config
+├── SANDBOX_GUIDE.md     # Sandbox & containerization guide
+├── README.md            # English documentation
+├── README.zh-CN.md      # 中文文档
+├── ...                  # Other modules/assets
 ```
 
-## 🛠️ 技术栈
-- **FastAPI** - Web框架
-- **Faster-Whisper** - 语音识别
-- **FFmpeg** - 音频提取
-- **HTML/JS** - 前端界面
+## 🛠️ Tech Stack
 
-## 📝 使用说明
-1. 打开网站
-2. 选择界面语言
-3. 选择视频语言
-4. 拖拽或选择视频文件
-5. 等待处理完成
-6. 查看转录结果和详细日志
+* **FastAPI** - Web framework
+* **Faster-Whisper** - Speech recognition
+* **FFmpeg** - Audio extraction
+* **HTML/JS** - Frontend UI
 
-## 🔧 配置选项
-在 `app.py` 中可以调整：
-- Whisper模型大小 (tiny/base/small/medium/large)
-- 文件大小限制
-- 音频质量设置
+## 📝 User Instructions
 
-## 🚀 未来开发计划
+1. Open the web app
+2. Choose UI language
+3. Choose video language
+4. Drag-and-drop or upload video
+5. Wait for processing
+6. View transcript and logs
 
-### 1. 🌐 Streamlit部署
-- [ ] 将应用迁移到Streamlit平台
-- [ ] 利用Streamlit的云部署功能
-- [ ] 简化用户界面，提升用户体验
-- [ ] 添加更多交互式组件
+## 🔧 Config Options
 
-### 2. 🤖 LLM扩展功能
-- [ ] 集成OpenAI GPT API进行文本润色
-- [ ] 添加智能摘要功能
-- [ ] 支持关键点提取
-- [ ] 多语言翻译功能
-- [ ] 文本格式化和结构化输出
-- [ ] 支持问答功能（基于转录内容）
+In `app.py`:
 
-### 3. ☁️ 云端运行方案
-- [ ] **Google Colab部署**
-  - 创建Colab笔记本版本
-  - 利用免费GPU资源
-  - 支持在线运行和测试
-- [ ] **Hugging Face Spaces**
-  - 部署到Hugging Face免费平台
-  - 利用免费GPU资源
-  - 支持持续集成和自动部署
-- [ ] **其他免费平台**
-  - Railway部署
-  - Render免费层
-  - Vercel部署（前端）
+* Whisper model size (tiny/base/small/medium/large)
+* File size limits
+* Audio quality options
 
-### 4. 🔧 技术优化
-- [ ] 添加WebSocket实时进度更新
-- [ ] 支持批量文件处理
-- [ ] 添加文件格式转换功能
-- [ ] 优化音频处理算法
-- [ ] 添加缓存机制
+## 🚀 Future Roadmap
 
-### 5. 📊 功能增强
-- [ ] 用户认证和文件管理
-- [ ] 转录历史记录
-- [ ] 多种导出格式（TXT, SRT, VTT）
-- [ ] 字幕文件生成
-- [ ] 音频质量分析
+### 1. 🌐 Streamlit Deployment
 
-## 🤝 贡献
+* [ ] Migrate app to Streamlit
+* [ ] Use Streamlit cloud deployment
+* [ ] Simplify UI & UX
+* [ ] Add more interactive widgets
 
-欢迎提交Issue和Pull Request！
+### 2. 🤖 LLM Extensions
 
-## �� 许可证
+* [ ] Integrate OpenAI GPT for polishing
+* [ ] Smart summarization
+* [ ] Key point extraction
+* [ ] Multilingual translation
+* [ ] Text formatting & structuring
+* [ ] Q\&A based on transcripts
 
-MIT License 
+### 3. ☁️ Cloud Deployment Options
+
+* [ ] **Google Colab**
+
+  * Notebook version
+  * Free GPU
+  * Online demo ready
+* [ ] **Hugging Face Spaces**
+
+  * Hosted on HF platform
+  * Free GPU
+  * CI/CD support
+* [ ] **Other Free Platforms**
+
+  * Railway
+  * Render (free tier)
+  * Vercel (frontend)
+
+### 4. 🔧 Technical Enhancements
+
+* [ ] WebSocket for real-time updates
+* [ ] Batch file support
+* [ ] File format conversion
+* [ ] Audio preprocessing optimization
+* [ ] Add caching system
+
+### 5. 📊 Feature Enhancements
+
+* [ ] User auth & file management
+* [ ] Transcription history
+* [ ] Multi-format export (TXT, SRT, VTT)
+* [ ] Subtitle generation
+* [ ] Audio quality analytics
+
+## 🤝 Contributions
+
+Issues and PRs welcome!
+
+## 📄 License
+
+MIT License
