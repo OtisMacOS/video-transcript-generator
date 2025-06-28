@@ -6,19 +6,24 @@ import time
 from pathlib import Path
 from typing import Optional
 import ffmpeg
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 from languages import get_text, LANGUAGES
 from sandbox_config import sandbox_manager, SandboxConfig
+from starlette.concurrency import run_in_threadpool
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="视频转录生成器 MVP", version="1.0.0")
+
+# 配置模板引擎
+templates = Jinja2Templates(directory="templates")
 
 # 配置Whisper模型
 # 可选模型: tiny, base, small, medium, large
@@ -39,6 +44,7 @@ class LLMRequest(BaseModel):
     provider: str = "openai"  # openai, anthropic, google
     style: str = "polish"  # polish, summarize, translate
     target_language: str = "zh"
+    base_url: Optional[str] = None
 
 class LLMResponse(BaseModel):
     """LLM润色响应模型"""
@@ -49,244 +55,68 @@ class LLMResponse(BaseModel):
     processing_time: float
     sandbox_validation: dict
 
-def generate_html(ui_lang="zh"):
-    """生成多语言HTML页面"""
-    t = lambda key: get_text(ui_lang, key)
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{t('title')}</title>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }}
-            .upload-area {{ border: 2px dashed #ccc; padding: 40px; text-align: center; margin: 20px 0; }}
-            .upload-area.dragover {{ border-color: #007bff; background-color: #f8f9fa; }}
-            button {{ background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
-            button:hover {{ background: #0056b3; }}
-            #result {{ margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; white-space: pre-wrap; }}
-            .loading {{ display: none; color: #007bff; }}
-            .language-select {{ margin: 20px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }}
-            .log-container {{ margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }}
-            .log-entry {{ margin: 2px 0; }}
-            .log-info {{ color: #007bff; }}
-            .log-warning {{ color: #ffc107; }}
-            .log-error {{ color: #dc3545; }}
-            .ui-language {{ margin-bottom: 20px; padding: 10px; background: #e9ecef; border-radius: 5px; }}
-        </style>
-    </head>
-    <body>
-        <h1>🎬 {t('title')}</h1>
-        <p>{t('subtitle')}</p>
-        
-        <div class="ui-language">
-            <label for="uiLanguageSelect"><strong>界面语言 / UI Language:</strong></label>
-            <select id="uiLanguageSelect" style="margin-left: 10px; padding: 5px;" onchange="changeUILanguage()">
-                <option value="zh" {'selected' if ui_lang == 'zh' else ''}>中文</option>
-                <option value="en" {'selected' if ui_lang == 'en' else ''}>English</option>
-                <option value="ru" {'selected' if ui_lang == 'ru' else ''}>Русский</option>
-                <option value="de" {'selected' if ui_lang == 'de' else ''}>Deutsch</option>
-                <option value="fr" {'selected' if ui_lang == 'fr' else ''}>Français</option>
-                <option value="ja" {'selected' if ui_lang == 'ja' else ''}>日本語</option>
-            </select>
-        </div>
-        
-        <div class="language-select">
-            <label for="languageSelect"><strong>{t('select_language')}</strong></label>
-            <select id="languageSelect" style="margin-left: 10px; padding: 5px;">
-                <option value="auto">{t('auto_detect')}</option>
-                <option value="zh">{t('chinese')}</option>
-                <option value="en">{t('english')}</option>
-                <option value="ru">{t('russian')}</option>
-                <option value="de">{t('german')}</option>
-                <option value="fr">{t('french')}</option>
-                <option value="ja">{t('japanese')}</option>
-            </select>
-        </div>
-        
-        <div class="upload-area" id="uploadArea">
-            <p>{t('upload_text')}</p>
-            <input type="file" id="fileInput" accept="video/*" style="display: none;">
-            <button onclick="document.getElementById('fileInput').click()">{t('select_file')}</button>
-        </div>
-        
-        <div class="loading" id="loading">
-            <p>⏳ {t('processing')}</p>
-        </div>
-        
-        <div class="log-container" id="logContainer" style="display: none;">
-            <h4>{t('log_title')}</h4>
-            <div id="logContent"></div>
-        </div>
-        
-        <div id="result"></div>
-        
-        <script>
-            const uploadArea = document.getElementById('uploadArea');
-            const fileInput = document.getElementById('fileInput');
-            const loading = document.getElementById('loading');
-            const result = document.getElementById('result');
-            const logContainer = document.getElementById('logContainer');
-            const logContent = document.getElementById('logContent');
-            const languageSelect = document.getElementById('languageSelect');
-            const uiLanguageSelect = document.getElementById('uiLanguageSelect');
-            
-            function changeUILanguage() {{
-                const newLang = uiLanguageSelect.value;
-                window.location.href = `/?ui_lang=${{newLang}}`;
-            }}
-            
-            function addLog(message, type = 'info') {{
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry log-${{type}}`;
-                logEntry.textContent = `[${{timestamp}}] ${{message}}`;
-                logContent.appendChild(logEntry);
-                logContent.scrollTop = logContent.scrollHeight;
-            }}
-            
-            // 拖拽上传
-            uploadArea.addEventListener('dragover', (e) => {{
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            }});
-            
-            uploadArea.addEventListener('dragleave', () => {{
-                uploadArea.classList.remove('dragover');
-            }});
-            
-            uploadArea.addEventListener('drop', (e) => {{
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {{
-                    uploadFile(files[0]);
-                }}
-            }});
-            
-            fileInput.addEventListener('change', (e) => {{
-                if (e.target.files.length > 0) {{
-                    uploadFile(e.target.files[0]);
-                }}
-            }});
-            
-            async function uploadFile(file) {{
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('language', languageSelect.value);
-                
-                loading.style.display = 'block';
-                result.innerHTML = '';
-                logContainer.style.display = 'block';
-                logContent.innerHTML = '';
-                
-                addLog(`${{getText('start_processing')}} ${{file.name}} (${{(file.size / 1024 / 1024).toFixed(2)}} MB)`, 'info');
-                addLog(`${{getText('selected_language')}} ${{languageSelect.options[languageSelect.selectedIndex].text}}`, 'info');
-                
-                try {{
-                    const response = await fetch('/transcribe', {{
-                        method: 'POST',
-                        body: formData
-                    }});
-                    
-                    const data = await response.json();
-                    
-                    if (response.ok) {{
-                        addLog(getText('transcription_complete'), 'info');
-                        result.innerHTML = `
-                            <h3>✅ ${{getText('transcription_complete')}}</h3>
-                            <p><strong>${{getText('language')}}</strong> ${{data.language}}</p>
-                            <p><strong>${{getText('transcription_content')}}</strong></p>
-                            <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #ddd;">
-                                ${{data.text}}
-                            </div>
-                        `;
-                    }} else {{
-                        addLog(`${{getText('error')}} ${{data.detail}}`, 'error');
-                        result.innerHTML = `<p style="color: red;">❌ ${{getText('error')}} ${{data.detail}}</p>`;
-                    }}
-                }} catch (error) {{
-                    addLog(`${{getText('upload_failed')}} ${{error.message}}`, 'error');
-                    result.innerHTML = `<p style="color: red;">❌ ${{getText('upload_failed')}} ${{error.message}}</p>`;
-                }} finally {{
-                    loading.style.display = 'none';
-                }}
-            }}
-            
-            // 多语言文本函数
-            const texts = {{
-                'zh': {{
-                    'start_processing': '{t('start_processing')}',
-                    'selected_language': '{t('selected_language')}',
-                    'transcription_complete': '{t('transcription_complete')}',
-                    'language': '{t('language')}',
-                    'transcription_content': '{t('transcription_content')}',
-                    'error': '{t('error')}',
-                    'upload_failed': '{t('upload_failed')}'
-                }},
-                'en': {{
-                    'start_processing': 'Start processing file:',
-                    'selected_language': 'Selected language:',
-                    'transcription_complete': 'Transcription complete!',
-                    'language': 'Language:',
-                    'transcription_content': 'Transcription content:',
-                    'error': 'Error:',
-                    'upload_failed': 'Upload failed:'
-                }},
-                'ru': {{
-                    'start_processing': 'Начало обработки файла:',
-                    'selected_language': 'Выбранный язык:',
-                    'transcription_complete': 'Транскрипция завершена!',
-                    'language': 'Язык:',
-                    'transcription_content': 'Содержание транскрипции:',
-                    'error': 'Ошибка:',
-                    'upload_failed': 'Ошибка загрузки:'
-                }},
-                'de': {{
-                    'start_processing': 'Dateiverarbeitung starten:',
-                    'selected_language': 'Ausgewählte Sprache:',
-                    'transcription_complete': 'Transkription abgeschlossen!',
-                    'language': 'Sprache:',
-                    'transcription_content': 'Transkriptionsinhalt:',
-                    'error': 'Fehler:',
-                    'upload_failed': 'Upload fehlgeschlagen:'
-                }},
-                'fr': {{
-                    'start_processing': 'Début du traitement du fichier:',
-                    'selected_language': 'Langue sélectionnée:',
-                    'transcription_complete': 'Transcription terminée!',
-                    'language': 'Langue:',
-                    'transcription_content': 'Contenu de la transcription:',
-                    'error': 'Erreur:',
-                    'upload_failed': 'Échec du téléchargement:'
-                }},
-                'ja': {{
-                    'start_processing': 'ファイル処理開始:',
-                    'selected_language': '選択された言語:',
-                    'transcription_complete': '文字起こし完了！',
-                    'language': '言語:',
-                    'transcription_content': '文字起こし内容:',
-                    'error': 'エラー:',
-                    'upload_failed': 'アップロード失敗:'
-                }}
-            }};
-            
-            function getText(key) {{
-                const currentLang = uiLanguageSelect.value;
-                return texts[currentLang] ? texts[currentLang][key] : texts['en'][key];
-            }}
-        </script>
-    </body>
-    </html>
-    """
-
 @app.get("/", response_class=HTMLResponse)
-async def read_root(ui_lang: str = Query("zh", description="界面语言")):
+async def read_root(request: Request, ui_lang: str = Query("zh", description="界面语言")):
     """多语言HTML上传页面"""
     if ui_lang not in LANGUAGES:
         ui_lang = "zh"
-    return generate_html(ui_lang)
+    
+    # 准备模板变量
+    template_vars = {
+        "request": request,
+        "ui_lang": ui_lang,
+        "title": get_text(ui_lang, "title"),
+        "subtitle": get_text(ui_lang, "subtitle"),
+        "select_language": get_text(ui_lang, "select_language"),
+        "auto_detect": get_text(ui_lang, "auto_detect"),
+        "chinese": get_text(ui_lang, "chinese"),
+        "english": get_text(ui_lang, "english"),
+        "russian": get_text(ui_lang, "russian"),
+        "german": get_text(ui_lang, "german"),
+        "french": get_text(ui_lang, "french"),
+        "japanese": get_text(ui_lang, "japanese"),
+        "upload_text": get_text(ui_lang, "upload_text"),
+        "select_file": get_text(ui_lang, "select_file"),
+        "processing": get_text(ui_lang, "processing"),
+        "log_title": get_text(ui_lang, "log_title"),
+        "start_processing": get_text(ui_lang, "start_processing"),
+        "selected_language": get_text(ui_lang, "selected_language"),
+        "transcription_complete": get_text(ui_lang, "transcription_complete"),
+        "language": get_text(ui_lang, "language"),
+        "transcription_content": get_text(ui_lang, "transcription_content"),
+        "error": get_text(ui_lang, "error"),
+        "upload_failed": get_text(ui_lang, "upload_failed"),
+        "llm_section_title": get_text(ui_lang, "llm_section_title"),
+        "llm_provider_label": get_text(ui_lang, "llm_provider_label"),
+        "llm_style_label": get_text(ui_lang, "llm_style_label"),
+        "llm_api_key_label": get_text(ui_lang, "llm_api_key_label"),
+        "llm_api_key_placeholder": get_text(ui_lang, "llm_api_key_placeholder"),
+        "llm_target_language_label": get_text(ui_lang, "llm_target_language_label"),
+        "llm_polish": get_text(ui_lang, "llm_polish"),
+        "llm_summarize": get_text(ui_lang, "llm_summarize"),
+        "llm_translate": get_text(ui_lang, "llm_translate"),
+        "llm_openai": get_text(ui_lang, "llm_openai"),
+        "llm_anthropic": get_text(ui_lang, "llm_anthropic"),
+        "llm_google": get_text(ui_lang, "llm_google"),
+        "llm_optimize_button": get_text(ui_lang, "llm_optimize_button"),
+        "llm_optimizing": get_text(ui_lang, "llm_optimizing"),
+        "llm_optimize_complete": get_text(ui_lang, "llm_optimize_complete"),
+        "llm_original_text": get_text(ui_lang, "llm_original_text"),
+        "llm_optimized_text": get_text(ui_lang, "llm_optimized_text"),
+        "llm_processing_time": get_text(ui_lang, "llm_processing_time"),
+        "llm_provider": get_text(ui_lang, "llm_provider"),
+        "llm_style": get_text(ui_lang, "llm_style"),
+        "llm_sandbox_validation": get_text(ui_lang, "llm_sandbox_validation"),
+        "llm_validation_passed": get_text(ui_lang, "llm_validation_passed"),
+        "llm_validation_failed": get_text(ui_lang, "llm_validation_failed"),
+        "llm_api_key_required": get_text(ui_lang, "llm_api_key_required"),
+        "llm_text_required": get_text(ui_lang, "llm_text_required"),
+        "llm_optimize_failed": get_text(ui_lang, "llm_optimize_failed"),
+        "llm_copy_button": get_text(ui_lang, "llm_copy_button"),
+        "llm_download_button": get_text(ui_lang, "llm_download_button")
+    }
+    
+    return templates.TemplateResponse("index.html", template_vars)
 
 @app.post("/transcribe", response_model=TranscriptResponse)
 async def transcribe_video(file: UploadFile = File(...), language: str = Form("auto")):
@@ -446,50 +276,39 @@ async def transcribe_video(file: UploadFile = File(...), language: str = Form("a
             raise HTTPException(status_code=500, detail=f"转录失败: {str(e)}")
 
 @app.post("/polish", response_model=LLMResponse)
-async def polish_text(request: LLMRequest):
-    """LLM文本润色接口（沙箱模式）"""
-    
+def polish_text(request: LLMRequest):
     start_time = time.time()
-    logger.info(f"收到LLM润色请求: provider={request.provider}, style={request.style}")
-    
-    # 沙箱验证
+    logger.info(f"收到LLM润色请求: provider={request.provider}, style={request.style}, base_url={request.base_url}")
+
     validation_result = sandbox_manager.validate_request(
         api_key=request.api_key,
         input_text=request.text
     )
-    
     if not validation_result["valid"]:
-        logger.error(f"沙箱验证失败: {validation_result['errors']}")
-        raise HTTPException(
-            status_code=400, 
-            detail=f"安全验证失败: {', '.join(validation_result['errors'])}"
-        )
-    
-    logger.info("沙箱验证通过，开始处理LLM请求")
-    
+        logger.warning(f"沙箱校验警告: {validation_result['errors']}")
+
     try:
-        # 根据提供商调用不同的LLM API
         if request.provider == "openai":
-            polished_text = await _call_openai_api(request)
+            polished_text = _call_openai_api(request)
         elif request.provider == "anthropic":
-            polished_text = await _call_anthropic_api(request)
+            polished_text = _call_anthropic_api(request)
         elif request.provider == "google":
-            polished_text = await _call_google_api(request)
+            polished_text = _call_google_api(request)
         else:
             raise HTTPException(status_code=400, detail="不支持的LLM提供商")
-        
+
         processing_time = time.time() - start_time
-        
-        # 记录沙箱审计日志
+
         sandbox_manager.log_request({
             "provider": request.provider,
             "input": request.text,
             "api_key": request.api_key,
-            "style": request.style
+            "style": request.style,
+            "base_url": request.base_url
         })
-        
+
         logger.info(f"LLM润色完成，耗时: {processing_time:.2f}秒")
-        
+
         return LLMResponse(
             original_text=request.text,
             polished_text=polished_text,
@@ -498,41 +317,28 @@ async def polish_text(request: LLMRequest):
             processing_time=processing_time,
             sandbox_validation=validation_result
         )
-        
+
     except Exception as e:
         logger.error(f"LLM润色失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"LLM润色失败: {str(e)}")
 
-async def _call_openai_api(request: LLMRequest) -> str:
-    """调用OpenAI API"""
-    import openai
-    
-    # 设置API密钥
-    openai.api_key = request.api_key
-    
-    # 根据风格构建提示词
-    if request.style == "polish":
-        prompt = f"请润色以下文本，使其更加流畅自然：\n\n{request.text}"
-    elif request.style == "summarize":
-        prompt = f"请总结以下文本的主要内容：\n\n{request.text}"
-    elif request.style == "translate":
-        prompt = f"请将以下文本翻译成{request.target_language}：\n\n{request.text}"
-    else:
-        prompt = f"请处理以下文本：\n\n{request.text}"
-    
+def _call_openai_api(request: LLMRequest) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=request.api_key,
+        base_url=request.base_url if request.base_url else None
+    )
+
     try:
-        response = await openai.ChatCompletion.acreate(
+        completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "你是一个专业的文本处理助手。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.7
+                {"role": "system", "content": "你是一个有用的助手。"},
+                {"role": "user", "content": request.text}
+            ]
         )
-        
-        return response.choices[0].message.content.strip()
-        
+        return completion.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API调用失败: {str(e)}")
         raise Exception(f"OpenAI API错误: {str(e)}")
