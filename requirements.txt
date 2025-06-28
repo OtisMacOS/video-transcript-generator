@@ -1,19 +1,19 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-python-multipart==0.0.6
-faster-whisper==0.8.0
-ffmpeg-python==0.2.0
-python-dotenv==1.0.0
-pydantic==2.5.0
-jinja2==3.1.2
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+faster-whisper>=0.6.0,<0.8.0
+ffmpeg-python>=0.2.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+jinja2>=3.1.0
 
 # LLM API 依赖
 openai>=1.2.4
-anthropic==0.7.8
-google-generativeai==0.3.2
+anthropic>=0.7.0
+google-generativeai>=0.3.0
 
 # 安全相关依赖
-cryptography==41.0.7
+cryptography>=41.0.0
 
 # Streamlit UI
 streamlit>=1.28.0
