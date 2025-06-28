@@ -53,7 +53,18 @@ LANGUAGES = {
         "llm_text_required": "请先完成视频转录",
         "llm_optimize_failed": "优化失败:",
         "llm_copy_button": "复制文本",
-        "llm_download_button": "下载结果"
+        "llm_download_button": "下载结果",
+        "transcribe_lang": "选择转录语言",
+        "llm_btn": "用LLM优化文本",
+        "llm_success": "优化结果：",
+        "llm_fail": "调用失败: ",
+        "input_warning": "请填写API Key和文本",
+        "transcribe_success": "转录完成！",
+        "transcribe_fail": "转录失败: ",
+        "transcribed_text": "转录文本",
+        "transcribing": "正在转录视频，请稍候...",
+        "upload": "上传视频文件",
+        "title": "视频转录 + LLM 优化"
     },
     "en": {
         "title": "Video Transcript Generator",
@@ -108,7 +119,18 @@ LANGUAGES = {
         "llm_text_required": "Please complete video transcription first",
         "llm_optimize_failed": "Optimization failed:",
         "llm_copy_button": "Copy Text",
-        "llm_download_button": "Download Result"
+        "llm_download_button": "Download Result",
+        "transcribe_lang": "Transcription Language",
+        "llm_btn": "Optimize with LLM",
+        "llm_success": "Optimized Result:",
+        "llm_fail": "Call failed: ",
+        "input_warning": "Please enter API Key and text",
+        "transcribe_success": "Transcription complete!",
+        "transcribe_fail": "Transcription failed: ",
+        "transcribed_text": "Transcribed Text",
+        "transcribing": "Transcribing video, please wait...",
+        "upload": "Upload video file",
+        "title": "Video Transcription + LLM Optimization"
     },
     "ru": {
         "title": "Генератор транскриптов видео",

@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
-from languages import get_text, LANGUAGES
-from sandbox_config import sandbox_manager, SandboxConfig
+from core.languages import get_text, LANGUAGES
+from config.sandbox_config import sandbox_manager, SandboxConfig
 from starlette.concurrency import run_in_threadpool
 
 # 配置日志

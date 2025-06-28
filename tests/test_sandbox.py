@@ -5,7 +5,7 @@
 
 import asyncio
 import json
-from sandbox_config import sandbox_manager, SandboxConfig
+from config.sandbox_config import sandbox_manager, SandboxConfig
 
 def test_sandbox_validation():
     """测试沙箱验证功能，返回失败用例列表"""
