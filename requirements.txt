@@ -1,7 +1,7 @@
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
-faster-whisper==0.9.0
+faster-whisper==0.8.0
 ffmpeg-python==0.2.0
 python-dotenv==1.0.0
 pydantic==2.5.0
@@ -15,6 +15,10 @@ google-generativeai==0.3.2
 # 安全相关依赖
 cryptography==41.0.7
 
-# 删除 hashlib-compat==1.0.0 
+# Streamlit UI
+streamlit>=1.28.0
 
-streamlit 
+# 注意：此项目需要系统安装ffmpeg
+# Ubuntu/Debian: sudo apt-get install ffmpeg
+# macOS: brew install ffmpeg
+# Windows: 下载ffmpeg并添加到PATH 
