@@ -1,9 +1,8 @@
 from openai import OpenAI
 
 # ====== 在这里填写你的API Key和Base URL ======
-API_KEY = "sk-fTg8YRcDbWRSpLJVen5bUZtkZoHw6ytk5CeJOUqNYcCS9tTB"         # 例如 sk-xxxxxxx
-BASE_URL = "https://xiaoai.plus/v1"       # 例如 https://api.openai.com/v1 或代理地址，留空则用官方
-# ===========================================
+API_KEY = "sk-xxxxxxx"         # 例如 
+BASE_URL =  "http:!@@#S"   
 
 client = OpenAI(
     api_key=API_KEY,
